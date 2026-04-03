@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Laudo GMN Pro</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <h1>Laudo GMN Pro</h1>
+        <p>
+          Pré-análise + análise completa para Google Meu Negócio, com checklist visual,
+          ranking de concorrentes e plano de ação recorrente.
+        </p>
+        <button id="install-app" class="secondary" hidden>Instalar no Android</button>
+      </div>
+    </header>
+
+    <main class="wrap layout">
+      <section class="card">
+        <h2>1) Dados do negócio</h2>
+        <form id="gmn-form">
+          <div class="grid">
+            <label>Nome do negócio<input type="text" name="businessName" required /></label>
+            <label>Categoria principal<input type="text" name="category" required /></label>
+            <label>Cidade / Região<input type="text" name="region" required /></label>
+            <label>URL do perfil<input type="url" name="profileUrl" placeholder="https://" /></label>
+            <label>Status de verificação
+              <select name="verificationStatus">
+                <option value="verified">Verificado</option>
+                <option value="notVerified">Não verificado</option>
+              </select>
+            </label>
+            <label>Tipo de análise
+              <select name="analysisMode">
+                <option value="pre">Pré-análise (prospecção)</option>
+                <option value="complete">Análise completa (cliente ativo)</option>
+              </select>
+            </label>
+          </div>
+
+          <h3>2) Checklist visual (0 a 10)</h3>
+          <p class="muted">Estratégia orientada por categorias, avaliações, postagens e gestão recorrente.</p>
+          <div class="grid">
+            <label>Perfil completo<input type="number" min="0" max="10" name="profileCompleteness" value="6" required /></label>
+            <label>Categorias corretas<input type="number" min="0" max="10" name="categories" value="5" required /></label>
+            <label>Avaliações (nota e volume)<input type="number" min="0" max="10" name="reviews" value="5" required /></label>
+            <label>Resposta às avaliações<input type="number" min="0" max="10" name="reviewReplies" value="4" required /></label>
+            <label>Frequência de postagens<input type="number" min="0" max="10" name="posts" value="4" required /></label>
+            <label>Qualidade de mídias<input type="number" min="0" max="10" name="media" value="6" required /></label>
+            <label>Perguntas e respostas<input type="number" min="0" max="10" name="qa" value="4" required /></label>
+            <label>Conversão (ligar/rota/site)<input type="number" min="0" max="10" name="conversion" value="5" required /></label>
+            <label>Monitoramento recorrente<input type="number" min="0" max="10" name="monitoring" value="3" required /></label>
+          </div>
+
+          <h3>3) Benchmark rápido de concorrentes</h3>
+          <div class="grid">
+            <label>Avaliação média do negócio (0-5)<input type="number" min="0" max="5" step="0.1" name="businessRating" value="4.2" required /></label>
+            <label>Quantidade de avaliações do negócio<input type="number" min="0" name="businessReviewsCount" value="38" required /></label>
+            <label>Média de avaliações dos TOP 10 concorrentes<input type="number" min="0" name="competitorReviewsAvg" value="92" required /></label>
+          </div>
+
+          <button type="submit">Gerar laudo estratégico</button>
+        </form>
+      </section>
+
+      <section class="card" id="result-card" hidden>
+        <h2>Resultado do laudo</h2>
+        <div class="kpi-grid">
+          <article class="kpi">
+            <span>Score Geral</span>
+            <strong id="overall-score">0</strong>
+            <small>/ 100</small>
+          </article>
+          <article class="kpi">
+            <span>Prioridade</span>
+            <strong id="priority-score">-</strong>
+            <small id="priority-text">-</small>
+          </article>
+          <article class="kpi">
+            <span>Gap competitivo</span>
+            <strong id="competitor-gap">-</strong>
+            <small id="competitor-gap-text">-</small>
+          </article>
+        </div>
+
+        <p id="maturity-level"></p>
+
+        <h3>Checklist visual por pilar</h3>
+        <ul id="checklist-list" class="clean-list"></ul>
+
+        <h3>Plano de ação (30 dias)</h3>
+        <ol id="action-plan"></ol>
+
+        <h3>Gestão recorrente (mensal)</h3>
+        <ul id="recurrence-list" class="clean-list"></ul>
+
+        <div class="actions">
+          <button id="download-report" type="button">Baixar laudo (JSON)</button>
+          <button id="share-report" class="secondary" type="button">Compartilhar</button>
+          <button id="print-report" class="secondary" type="button">Salvar em PDF</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <small>Versão final otimizada para Android (PWA): instale na tela inicial para uso rápido com clientes.</small>
+    </footer>
+
+    <script src="logic.js"></script>
+    <script src="script.js"></script>
+  </body>
+        </html>
+                                               
