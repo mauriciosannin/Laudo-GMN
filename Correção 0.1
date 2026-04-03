@@ -1,0 +1,813 @@
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..6126b5e8543b7411d8f78c9609214e98250be174
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,39 @@
++# Laudo-GMN
++
++Ferramenta de diagnóstico comercial para prospectar empresas com foco em Google Meu Negócio, tráfego pago e posicionamento digital.
++
++## Fluxo otimizado
++
++1. Preencher dados iniciais:
++   - pesquisa (empresa/empresário + cidade/estado),
++   - segmento,
++   - URL (Google/Instagram/TikTok).
++2. Clicar em **Gerar Laudo Geral**.
++3. Visualizar automaticamente:
++   - checklist visual (0 a 10),
++   - benchmark rápido de concorrentes,
++   - gráfico em pizza,
++   - gráfico em torres,
++   - recomendações comerciais.
++4. Baixar protocolo em HTML para envio ao prospect.
++
++> Importante: checklist e benchmark só aparecem após gerar o laudo.
++
++## Android e download
++
++- Instalação no Android como PWA (botão **Instalar no Android** quando disponível).
++- Pacote ZIP pronto em `download/laudo-gmn-android-pwa.zip`.
++
++Gerar pacote novamente:
++
++```bash
++./scripts/build_download.sh
++```
++
++## Executar localmente
++
++```bash
++python3 -m http.server 8080
++```
++
++Abrir em `http://localhost:8080`.
+diff --git a/app.js b/app.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..fc3efeb9adc49cc15e0a1928491bf69dcf0636d1
+--- /dev/null
++++ b/app.js
+@@ -0,0 +1,262 @@
++const status = document.getElementById('status');
++const form = document.getElementById('auditForm');
++const resultSection = document.getElementById('resultSection');
++const installBtn = document.getElementById('installBtn');
++
++const summary = document.getElementById('summary');
++const presenceScoreEl = document.getElementById('presenceScore');
++const priorityLevelEl = document.getElementById('priorityLevel');
++const businessRatingEl = document.getElementById('businessRating');
++const topRatingAvgEl = document.getElementById('topRatingAvg');
++const checklistGrid = document.getElementById('checklistGrid');
++const benchmarkGrid = document.getElementById('benchmarkGrid');
++const recommendationsEl = document.getElementById('recommendations');
++const downloadReportBtn = document.getElementById('downloadReport');
++
++const launchDate = '2026-04-03';
++status.textContent = `Build Android preparada em ${launchDate}. Pronta para uso e testes no smartphone.`;
++
++const BASE_CHECKLIST = [
++  { name: 'Perfil completo', score: 6 },
++  { name: 'Categorias corretas', score: 5 },
++  { name: 'Avaliações (nota e volume)', score: 5 },
++  { name: 'Resposta às avaliações', score: 4 },
++  { name: 'Frequência de postagens', score: 4 },
++  { name: 'Qualidade de mídias', score: 6 },
++  { name: 'Perguntas e respostas', score: 4 },
++  { name: 'Conversão (ligar/rota/site)', score: 5 },
++  { name: 'Monitoramento recorrente', score: 3 }
++];
++
++const BASE_BENCHMARK = [
++  { name: 'Avaliação média do negócio (0-5)', value: 4.2 },
++  { name: 'Quantidade de avaliações do negócio', value: 38 },
++  { name: 'Média de avaliações dos TOP 10 concorrentes', value: 92 }
++];
++
++let deferredPrompt;
++let latestReport = null;
++
++const detectPlatform = (url) => {
++  const value = url.toLowerCase();
++  if (value.includes('google.') || value.includes('maps')) return 'Google';
++  if (value.includes('instagram.')) return 'Instagram';
++  if (value.includes('tiktok.')) return 'TikTok';
++  return 'Link geral';
++};
++
++const adjustDataByPlatform = (platform) => {
++  const checklist = BASE_CHECKLIST.map((item) => ({ ...item }));
++  const benchmark = BASE_BENCHMARK.map((item) => ({ ...item }));
++
++  if (platform === 'Google') {
++    checklist.find((item) => item.name === 'Categorias corretas').score += 1;
++    checklist.find((item) => item.name === 'Conversão (ligar/rota/site)').score += 1;
++  }
++
++  if (platform === 'Instagram' || platform === 'TikTok') {
++    checklist.find((item) => item.name === 'Qualidade de mídias').score += 1;
++    checklist.find((item) => item.name === 'Frequência de postagens').score += 1;
++  }
++
++  return { checklist, benchmark };
++};
++
++const drawPieChart = (canvas, checklist) => {
++  const ctx = canvas.getContext('2d');
++  const values = checklist.map((item) => item.score);
++  const total = values.reduce((acc, value) => acc + value, 0);
++  const colors = ['#2563eb', '#38bdf8', '#22c55e', '#f59e0b', '#a855f7', '#ef4444', '#0ea5e9', '#14b8a6', '#eab308'];
++
++  ctx.clearRect(0, 0, canvas.width, canvas.height);
++
++  let start = -Math.PI / 2;
++  values.forEach((value, i) => {
++    const angle = total ? (value / total) * Math.PI * 2 : 0;
++    ctx.beginPath();
++    ctx.moveTo(160, 160);
++    ctx.arc(160, 160, 120, start, start + angle);
++    ctx.closePath();
++    ctx.fillStyle = colors[i % colors.length];
++    ctx.fill();
++    start += angle;
++  });
++};
++
++const drawBarChart = (canvas, benchmark) => {
++  const ctx = canvas.getContext('2d');
++  const labels = ['Negócio', 'Avaliações negócio', 'Média TOP 10'];
++  const values = [benchmark[0].value * 20, benchmark[1].value, benchmark[2].value];
++
++  const max = Math.max(...values, 1);
++  const barWidth = 95;
++  const gap = 28;
++  const baseY = 280;
++
++  ctx.clearRect(0, 0, canvas.width, canvas.height);
++  ctx.fillStyle = '#d1d5db';
++  ctx.fillRect(30, 20, 2, 260);
++  ctx.fillRect(30, 280, 420, 2);
++
++  values.forEach((value, i) => {
++    const height = (value / max) * 220;
++    const x = 55 + i * (barWidth + gap);
++    const y = baseY - height;
++
++    ctx.fillStyle = '#2563eb';
++    ctx.fillRect(x, y, barWidth, height);
++
++    ctx.fillStyle = '#111827';
++    ctx.font = '12px sans-serif';
++    ctx.fillText(labels[i], x, 300);
++    ctx.fillText(String(Math.round(value)), x + 28, y - 8);
++  });
++};
++
++const buildRecommendations = ({ platform, averageScore, benchmark }) => {
++  const rec = [];
++  const reviewGap = benchmark[2].value - benchmark[1].value;
++
++  if (averageScore < 5.5) {
++    rec.push('Prioridade alta: organizar perfil, posts e rotina semanal para subir presença local nos próximos 30 dias.');
++  }
++
++  if (reviewGap > 20) {
++    rec.push('Gap competitivo em avaliações: criar campanha de captação para aproximar do volume médio dos TOP 10.');
++  }
++
++  if (platform === 'Google') {
++    rec.push('Executar plano de Google Meu Negócio com foco em categorias, Q&A e resposta de avaliações em até 24h.');
++  } else {
++    rec.push('Integrar social + Google: transformar conteúdo de rede social em prova social para o Perfil da Empresa.');
++  }
++
++  rec.push('Apresentar proposta com gestão recorrente mensal de GMN + tráfego pago para acelerar geração de leads.');
++  return rec;
++};
++
++const renderChecklist = (checklist) => {
++  checklistGrid.innerHTML = '';
++  checklist.forEach((item) => {
++    const box = document.createElement('article');
++    box.className = 'metric-box';
++    box.innerHTML = `<h4>${item.name}</h4><p>${item.score}/10</p>`;
++    checklistGrid.appendChild(box);
++  });
++};
++
++const renderBenchmark = (benchmark) => {
++  benchmarkGrid.innerHTML = '';
++  benchmark.forEach((item) => {
++    const box = document.createElement('article');
++    box.className = 'metric-box';
++    box.innerHTML = `<h4>${item.name}</h4><p>${item.value}</p>`;
++    benchmarkGrid.appendChild(box);
++  });
++};
++
++form?.addEventListener('submit', (event) => {
++  event.preventDefault();
++
++  const searchBox = document.getElementById('searchBox').value.trim();
++  const segment = document.getElementById('segment').value.trim();
++  const sourceLink = document.getElementById('sourceLink').value.trim();
++
++  const platform = detectPlatform(sourceLink);
++  const { checklist, benchmark } = adjustDataByPlatform(platform);
++
++  const averageScore = Number((checklist.reduce((acc, item) => acc + item.score, 0) / checklist.length).toFixed(1));
++
++  const priorityLevel =
++    averageScore < 5.5 ? 'Alta prioridade (grande oportunidade de fechamento)' :
++    averageScore < 7 ? 'Média prioridade' :
++    'Baixa prioridade';
++
++  summary.textContent = `Empresa pesquisada: ${searchBox} | Segmento: ${segment} | Plataforma: ${platform}.`;
++  presenceScoreEl.textContent = `${averageScore}`;
++  priorityLevelEl.textContent = priorityLevel;
++  businessRatingEl.textContent = `${benchmark[0].value}`;
++  topRatingAvgEl.textContent = `${benchmark[2].value}`;
++
++  renderChecklist(checklist);
++  renderBenchmark(benchmark);
++
++  drawPieChart(document.getElementById('pieChart'), checklist);
++  drawBarChart(document.getElementById('barChart'), benchmark);
++
++  const recommendations = buildRecommendations({ platform, averageScore, benchmark });
++  recommendationsEl.innerHTML = '';
++  recommendations.forEach((item) => {
++    const li = document.createElement('li');
++    li.textContent = item;
++    recommendationsEl.appendChild(li);
++  });
++
++  latestReport = {
++    generatedAt: new Date().toISOString(),
++    searchBox,
++    segment,
++    sourceLink,
++    platform,
++    averageScore,
++    priorityLevel,
++    checklist,
++    benchmark,
++    recommendations
++  };
++
++  resultSection.hidden = false;
++});
++
++downloadReportBtn?.addEventListener('click', () => {
++  if (!latestReport) return;
++
++  const checklistHtml = latestReport.checklist
++    .map((item) => `<li>${item.name}: ${item.score}/10</li>`)
++    .join('');
++  const benchmarkHtml = latestReport.benchmark
++    .map((item) => `<li>${item.name}: ${item.value}</li>`)
++    .join('');
++
++  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo GMN</title>
++  <style>body{font-family:Arial,sans-serif;padding:20px;color:#1f2937}h1{margin-top:0}.box{border:1px solid #dbe1ee;border-radius:10px;padding:12px;margin:8px 0}</style></head><body>
++  <h1>Protocolo de Laudo - ${latestReport.searchBox}</h1>
++  <div class="box"><strong>Segmento:</strong> ${latestReport.segment}<br><strong>Plataforma:</strong> ${latestReport.platform}<br><strong>Link:</strong> ${latestReport.sourceLink}</div>
++  <div class="box"><strong>Score geral (0-10):</strong> ${latestReport.averageScore}<br><strong>Prioridade:</strong> ${latestReport.priorityLevel}</div>
++  <h2>Checklist visual (0-10)</h2><ul>${checklistHtml}</ul>
++  <h2>Benchmark</h2><ul>${benchmarkHtml}</ul>
++  <h2>Recomendações</h2><ul>${latestReport.recommendations.map((item) => `<li>${item}</li>`).join('')}</ul>
++  <p>Gerado em: ${new Date(latestReport.generatedAt).toLocaleString('pt-BR')}</p></body></html>`;
++
++  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
++  const url = URL.createObjectURL(blob);
++  const link = document.createElement('a');
++  link.href = url;
++  link.download = `laudo-${latestReport.searchBox.replace(/\s+/g, '-').toLowerCase()}.html`;
++  link.click();
++  URL.revokeObjectURL(url);
++});
++
++window.addEventListener('beforeinstallprompt', (event) => {
++  event.preventDefault();
++  deferredPrompt = event;
++  installBtn.hidden = false;
++});
++
++installBtn?.addEventListener('click', async () => {
++  if (!deferredPrompt) return;
++  deferredPrompt.prompt();
++  await deferredPrompt.userChoice;
++  deferredPrompt = null;
++  installBtn.hidden = true;
++});
++
++if ('serviceWorker' in navigator) {
++  window.addEventListener('load', async () => {
++    try {
++      await navigator.serviceWorker.register('./sw.js');
++    } catch (error) {
++      console.error('Falha ao registrar service worker:', error);
++    }
++  });
++}
+diff --git a/download/laudo-gmn-android-pwa.zip b/download/laudo-gmn-android-pwa.zip
+new file mode 100644
+index 0000000000000000000000000000000000000000..2379d1a09e218fa0f61889430aa7ab4c18cf8a4a
+GIT binary patch
+literal 9361
+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
+R#sTc>kMT7zks<l{^nWY*c<}%L
+
+literal 0
+HcmV?d00001
+
+diff --git a/icons/icon-192.svg b/icons/icon-192.svg
+new file mode 100644
+index 0000000000000000000000000000000000000000..24ae6e143a8ecc242a826532f8292e3d62e613af
+--- /dev/null
++++ b/icons/icon-192.svg
+@@ -0,0 +1,6 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" fill="none">
++  <rect width="192" height="192" rx="40" fill="#2563EB"/>
++  <path d="M45 108C45 78.1766 69.1766 54 99 54H147V138H99C69.1766 138 45 113.823 45 84V108Z" fill="#fff" opacity="0.2"/>
++  <path d="M58 102C58 81.0132 75.0132 64 96 64H134V128H96C75.0132 128 58 110.987 58 90V102Z" fill="#fff"/>
++  <text x="69" y="106" font-size="30" font-family="Arial, sans-serif" font-weight="700" fill="#1E40AF">GMN</text>
++</svg>
+diff --git a/icons/icon-512.svg b/icons/icon-512.svg
+new file mode 100644
+index 0000000000000000000000000000000000000000..0c58a97fc027c340d80f25e47d2f9da18b165bfa
+--- /dev/null
++++ b/icons/icon-512.svg
+@@ -0,0 +1,5 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
++  <rect width="512" height="512" rx="110" fill="#2563EB"/>
++  <circle cx="256" cy="256" r="170" fill="#fff"/>
++  <text x="138" y="290" font-size="96" font-family="Arial, sans-serif" font-weight="700" fill="#1E40AF">GMN</text>
++</svg>
+diff --git a/index.html b/index.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..6d71392a3d4c2f35d6631a31bdf0ee925899153c
+--- /dev/null
++++ b/index.html
+@@ -0,0 +1,92 @@
++<!doctype html>
++<html lang="pt-BR">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <meta name="theme-color" content="#2563eb" />
++    <title>Laudo GMN | Diagnóstico de Prospecção</title>
++    <link rel="manifest" href="manifest.webmanifest" />
++    <link rel="stylesheet" href="styles.css" />
++  </head>
++  <body>
++    <header class="topbar">
++      <h1>Laudo GMN</h1>
++      <p>Diagnóstico para prospectar contratos de GMN, tráfego pago e posicionamento de marca.</p>
++    </header>
++
++    <main class="container">
++      <section class="card hero">
++        <h2>Análise rápida de prospect</h2>
++        <p>Preencha apenas os dados iniciais e clique em <strong>Gerar Laudo Geral</strong>.</p>
++      </section>
++
++      <section class="card">
++        <form id="auditForm" class="form-grid">
++          <label>
++            Pesquisa (empresa ou empresário + cidade/UF na mesma caixa)
++            <input id="searchBox" name="searchBox" placeholder="Ex.: Padaria Pão Quente João Silva Campinas SP" required />
++          </label>
++
++          <label>
++            Segmento / ramo da empresa
++            <input id="segment" name="segment" placeholder="Ex.: Clínica odontológica" required />
++          </label>
++
++          <label class="full">
++            Link para extração (Instagram, TikTok ou Google)
++            <input id="sourceLink" name="sourceLink" type="url" placeholder="https://www.google.com/maps/place/..." required />
++          </label>
++
++          <div class="actions full">
++            <button type="submit">Gerar Laudo Geral</button>
++            <button id="installBtn" class="secondary" type="button" hidden>Instalar no Android</button>
++          </div>
++        </form>
++      </section>
++
++      <section id="resultSection" class="card" hidden>
++        <h2>Protocolo de Laudo Geral</h2>
++        <p id="summary"></p>
++
++        <div class="kpis">
++          <article class="kpi"><h3>Score geral (0-10)</h3><p id="presenceScore">-</p></article>
++          <article class="kpi"><h3>Prioridade comercial</h3><p id="priorityLevel">-</p></article>
++          <article class="kpi"><h3>Nota do negócio (0-5)</h3><p id="businessRating">-</p></article>
++          <article class="kpi"><h3>Média TOP 10</h3><p id="topRatingAvg">-</p></article>
++        </div>
++
++        <h3>Checklist visual (0 a 10)</h3>
++        <div id="checklistGrid" class="checklist-grid"></div>
++
++        <h3>Benchmark rápido de concorrentes</h3>
++        <div id="benchmarkGrid" class="benchmark-grid"></div>
++
++        <div class="charts">
++          <article class="chart-card">
++            <h3>Checklist por categoria (Pizza)</h3>
++            <canvas id="pieChart" width="320" height="320" aria-label="Gráfico de pizza"></canvas>
++          </article>
++          <article class="chart-card">
++            <h3>Benchmark negócio x concorrência (Torres)</h3>
++            <canvas id="barChart" width="480" height="320" aria-label="Gráfico de torres"></canvas>
++          </article>
++        </div>
++
++        <h3>Recomendações para fechamento</h3>
++        <ul id="recommendations"></ul>
++
++        <div class="actions">
++          <button id="downloadReport" type="button">Baixar laudo (HTML)</button>
++        </div>
++      </section>
++
++      <section class="card download">
++        <h2>Download da ferramenta</h2>
++        <a class="download-link" href="download/laudo-gmn-android-pwa.zip" download>Baixar pacote Android (ZIP)</a>
++        <p id="status"></p>
++      </section>
++    </main>
++
++    <script src="app.js"></script>
++  </body>
++</html>
+diff --git a/manifest.webmanifest b/manifest.webmanifest
+new file mode 100644
+index 0000000000000000000000000000000000000000..ced4b1e8a3882e70d8a0733976446b9a02157a78
+--- /dev/null
++++ b/manifest.webmanifest
+@@ -0,0 +1,24 @@
++{
++  "name": "Laudo GMN",
++  "short_name": "LaudoGMN",
++  "description": "Ferramenta de gestão para Perfil da Empresa no Google com foco em operação local.",
++  "start_url": "./index.html",
++  "display": "standalone",
++  "background_color": "#f5f7fb",
++  "theme_color": "#2563eb",
++  "lang": "pt-BR",
++  "icons": [
++    {
++      "src": "./icons/icon-192.svg",
++      "sizes": "192x192",
++      "type": "image/svg+xml",
++      "purpose": "any"
++    },
++    {
++      "src": "./icons/icon-512.svg",
++      "sizes": "512x512",
++      "type": "image/svg+xml",
++      "purpose": "any maskable"
++    }
++  ]
++}
+diff --git a/offline.html b/offline.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..f54bdaf8a5244ebf5660212f9b5e150cb000eeec
+--- /dev/null
++++ b/offline.html
+@@ -0,0 +1,19 @@
++<!doctype html>
++<html lang="pt-BR">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <title>Laudo GMN - Offline</title>
++    <style>
++      body { font-family: system-ui, sans-serif; margin: 0; display: grid; min-height: 100vh; place-items: center; background: #f5f7fb; color: #202736; }
++      .box { background: #fff; border: 1px solid #dbe1ee; border-radius: 14px; padding: 1rem 1.25rem; max-width: 420px; }
++      h1 { margin: 0 0 .5rem; font-size: 1.2rem; }
++    </style>
++  </head>
++  <body>
++    <div class="box">
++      <h1>Sem conexão</h1>
++      <p>Você está offline no momento. Assim que a internet voltar, recarregue para continuar.</p>
++    </div>
++  </body>
++</html>
+diff --git a/scripts/build_download.sh b/scripts/build_download.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..8bbd232b6ca5e6c76c6057406a3b441c386bd5c7
+--- /dev/null
++++ b/scripts/build_download.sh
+@@ -0,0 +1,16 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
++OUT_DIR="$ROOT_DIR/download"
++ZIP_FILE="$OUT_DIR/laudo-gmn-android-pwa.zip"
++
++mkdir -p "$OUT_DIR"
++rm -f "$ZIP_FILE"
++
++cd "$ROOT_DIR"
++zip -r "$ZIP_FILE" \
++  index.html styles.css app.js manifest.webmanifest sw.js offline.html README.md icons \
++  -x "*.DS_Store"
++
++echo "Pacote gerado em: $ZIP_FILE"
+diff --git a/styles.css b/styles.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..b5415f81ac1f70febe82ea0b057c82ab6f3cdb83
+--- /dev/null
++++ b/styles.css
+@@ -0,0 +1,85 @@
++:root {
++  --bg: #f5f7fb;
++  --surface: #ffffff;
++  --text: #202736;
++  --primary: #2563eb;
++  --primary-dark: #1e40af;
++  --border: #dbe1ee;
++}
++
++* { box-sizing: border-box; }
++
++body {
++  margin: 0;
++  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
++  background: var(--bg);
++  color: var(--text);
++}
++
++.topbar {
++  padding: 1rem;
++  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
++  color: #fff;
++}
++
++.topbar h1 { margin: 0; font-size: 1.3rem; }
++.topbar p { margin: 0.35rem 0 0; font-size: 0.94rem; }
++
++.container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
++
++.card {
++  background: var(--surface);
++  border: 1px solid var(--border);
++  border-radius: 16px;
++  padding: 1rem;
++  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
++  margin-bottom: 1rem;
++}
++
++.form-grid, .checklist-grid, .benchmark-grid { display: grid; gap: 0.8rem; }
++
++.form-grid label { display: grid; gap: 0.35rem; font-weight: 600; }
++
++input {
++  min-height: 42px;
++  border: 1px solid #cbd5e1;
++  border-radius: 10px;
++  padding: 0.6rem 0.65rem;
++  font-size: 0.95rem;
++}
++
++.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
++
++button, .download-link {
++  min-height: 44px;
++  padding: 0.7rem 1rem;
++  border-radius: 10px;
++  font-weight: 600;
++  text-decoration: none;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++}
++
++button { border: 0; background: var(--primary); color: #fff; cursor: pointer; }
++button.secondary, .download-link { background: #eaf0ff; color: var(--primary-dark); border: 1px solid #c9d8ff; }
++
++.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
++.kpi, .metric-box { border: 1px solid var(--border); border-radius: 12px; padding: 0.7rem; }
++.kpi h3, .metric-box h4 { margin: 0; font-size: 0.88rem; color: #475569; }
++.kpi p, .metric-box p { margin: 0.35rem 0 0; font-size: 1.05rem; font-weight: 700; }
++
++.charts { display: grid; gap: 0.8rem; margin: 1rem 0; }
++.chart-card { border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; }
++canvas { max-width: 100%; height: auto; background: #fff; }
++
++#recommendations { margin: 0.35rem 0 1rem; padding-left: 1rem; }
++#status { margin-top: 0.75rem; font-weight: 600; color: var(--primary-dark); }
++.full { grid-column: 1 / -1; }
++
++@media (min-width: 720px) {
++  .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
++  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
++  .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
++  .checklist-grid, .benchmark-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
++}
+diff --git a/sw.js b/sw.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..499b380634a9a4b85fc7f2214326249edcbaa806
+--- /dev/null
++++ b/sw.js
+@@ -0,0 +1,32 @@
++const CACHE_NAME = 'laudo-gmn-v1';
++const APP_SHELL = [
++  './',
++  './index.html',
++  './styles.css',
++  './app.js',
++  './manifest.webmanifest',
++  './offline.html',
++  './icons/icon-192.svg',
++  './icons/icon-512.svg'
++];
++
++self.addEventListener('install', (event) => {
++  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
++});
++
++self.addEventListener('activate', (event) => {
++  event.waitUntil(
++    caches.keys().then((keys) =>
++      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
++    )
++  );
++});
++
++self.addEventListener('fetch', (event) => {
++  event.respondWith(
++    caches.match(event.request).then((cached) => {
++      if (cached) return cached;
++      return fetch(event.request).catch(() => caches.match('./offline.html'));
++    })
++  );
++});
