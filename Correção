@@ -1,0 +1,425 @@
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..e759a668d039b4eed501ecb3b0016aba43a0d795
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,37 @@
++# Laudo-GMN
++
++Ferramenta de diagnóstico comercial para prospectar empresas com foco em Google Meu Negócio, tráfego pago e posicionamento digital.
++
++## O que a ferramenta faz
++
++- Campo de pesquisa único para **nome da empresa/empresário + cidade/estado**.
++- Campo de **segmento** do negócio.
++- Campo de **link de referência** (Google, Instagram ou TikTok) para classificação de origem e estratégia.
++- Bloco de sinais operacionais (resposta de avaliações, postagens, mídia e consistência de dados).
++- Bloco com dados reais de funil (impressões, interações, leads e vendas).
++- Geração de protocolo com:
++  - score de presença,
++  - nível de prioridade comercial,
++  - gráfico de pizza,
++  - gráfico de torres,
++  - recomendações para fechamento.
++- Exportação de laudo em HTML para envio ao prospect.
++
++## Android e download
++
++- Instalação no Android como PWA (botão **Instalar no Android** quando disponível).
++- Pacote ZIP pronto em `download/laudo-gmn-android-pwa.zip`.
++
++Gerar pacote novamente:
++
++```bash
++./scripts/build_download.sh
++```
++
++## Executar localmente
++
++```bash
++python3 -m http.server 8080
++```
++
++Abrir em `http://localhost:8080`.
+diff --git a/app.js b/app.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..8e42a415925bc071f54b8bf1c868ab9b8a321d3d
+--- /dev/null
++++ b/app.js
+@@ -0,0 +1,237 @@
++const status = document.getElementById('status');
++const form = document.getElementById('auditForm');
++const resultSection = document.getElementById('resultSection');
++const installBtn = document.getElementById('installBtn');
++
++const summary = document.getElementById('summary');
++const presenceScoreEl = document.getElementById('presenceScore');
++const clickLeadRateEl = document.getElementById('clickLeadRate');
++const leadSaleRateEl = document.getElementById('leadSaleRate');
++const priorityLevelEl = document.getElementById('priorityLevel');
++const recommendationsEl = document.getElementById('recommendations');
++const downloadReportBtn = document.getElementById('downloadReport');
++
++const launchDate = '2026-04-03';
++status.textContent = `Build Android preparada em ${launchDate}. Pronta para uso e testes no smartphone.`;
++
++let deferredPrompt;
++let latestReport = null;
++
++const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
++const pct = (part, total) => (total > 0 ? (part / total) * 100 : 0);
++
++const detectPlatform = (url) => {
++  const value = url.toLowerCase();
++  if (value.includes('google.') || value.includes('maps')) return 'Google';
++  if (value.includes('instagram.')) return 'Instagram';
++  if (value.includes('tiktok.')) return 'TikTok';
++  return 'Link geral';
++};
++
++const buildRecommendations = ({ platform, presenceScore, clickLeadRate, leadSaleRate }) => {
++  const items = [];
++
++  if (platform === 'Google') {
++    items.push('Priorizar auditoria de categoria principal/secundárias e atualização de serviços do Perfil da Empresa.');
++    items.push('Mapear concorrentes locais no pack 3 e criar plano de avaliações para ganhar relevância.');
++  }
++
++  if (clickLeadRate < 25) {
++    items.push('Otimizar CTA (ligação, WhatsApp, rota) e revisar ofertas para aumentar geração de leads.');
++  }
++
++  if (leadSaleRate < 25) {
++    items.push('Ajustar script comercial e tempo de resposta para elevar fechamento dos leads recebidos.');
++  }
++
++  if (presenceScore < 60) {
++    items.push('Executar sprint de 30 dias com posts semanais, respostas de avaliações e melhoria de mídia.');
++  }
++
++  if (items.length < 4) {
++    items.push('Manter rotina quinzenal de laudo para comparar evolução e justificar continuidade do contrato.');
++  }
++
++  return items;
++};
++
++const drawPieChart = (canvas, values, labels) => {
++  const ctx = canvas.getContext('2d');
++  const total = values.reduce((acc, value) => acc + value, 0);
++  const colors = ['#2563eb', '#38bdf8', '#22c55e', '#f59e0b'];
++
++  ctx.clearRect(0, 0, canvas.width, canvas.height);
++
++  let start = -Math.PI / 2;
++  values.forEach((value, i) => {
++    const angle = total ? (value / total) * Math.PI * 2 : 0;
++    ctx.beginPath();
++    ctx.moveTo(160, 160);
++    ctx.arc(160, 160, 120, start, start + angle);
++    ctx.closePath();
++    ctx.fillStyle = colors[i % colors.length];
++    ctx.fill();
++    start += angle;
++  });
++
++  ctx.fillStyle = '#111827';
++  ctx.font = '12px sans-serif';
++  labels.forEach((label, i) => {
++    ctx.fillStyle = colors[i % colors.length];
++    ctx.fillRect(12, 12 + i * 20, 12, 12);
++    ctx.fillStyle = '#111827';
++    ctx.fillText(label, 30, 22 + i * 20);
++  });
++};
++
++const drawBarChart = (canvas, values, labels) => {
++  const ctx = canvas.getContext('2d');
++  const max = Math.max(...values, 1);
++  const barWidth = 70;
++  const gap = 34;
++  const baseY = 280;
++
++  ctx.clearRect(0, 0, canvas.width, canvas.height);
++  ctx.fillStyle = '#d1d5db';
++  ctx.fillRect(30, 20, 2, 260);
++  ctx.fillRect(30, 280, 420, 2);
++
++  values.forEach((value, i) => {
++    const height = (value / max) * 220;
++    const x = 55 + i * (barWidth + gap);
++    const y = baseY - height;
++
++    ctx.fillStyle = '#2563eb';
++    ctx.fillRect(x, y, barWidth, height);
++
++    ctx.fillStyle = '#111827';
++    ctx.font = '12px sans-serif';
++    ctx.fillText(labels[i], x, 300);
++    ctx.fillText(String(value), x + 16, y - 8);
++  });
++};
++
++form?.addEventListener('submit', (event) => {
++  event.preventDefault();
++
++  const searchBox = document.getElementById('searchBox').value.trim();
++  const segment = document.getElementById('segment').value.trim();
++  const sourceLink = document.getElementById('sourceLink').value.trim();
++
++  const replyRate = Number(document.getElementById('replyRate').value);
++  const postFrequency = Number(document.getElementById('postFrequency').value);
++  const mediaQuality = Number(document.getElementById('mediaQuality').value);
++  const napConsistency = Number(document.getElementById('napConsistency').value);
++
++  const impressions = Number(document.getElementById('impressions').value);
++  const interactions = Number(document.getElementById('interactions').value);
++  const leads = Number(document.getElementById('leads').value);
++  const sales = Number(document.getElementById('sales').value);
++
++  const platform = detectPlatform(sourceLink);
++  const presenceScore = Math.round((replyRate + postFrequency + mediaQuality + napConsistency) / 4);
++  const clickLeadRate = pct(leads, interactions);
++  const leadSaleRate = pct(sales, leads);
++
++  const opportunityScore = clamp(100 - Math.round((presenceScore * 0.5) + (leadSaleRate * 0.5)), 0, 100);
++  const priorityLevel =
++    opportunityScore >= 65 ? 'Alta prioridade (bom potencial de fechamento)' :
++    opportunityScore >= 40 ? 'Média prioridade' :
++    'Baixa prioridade (perfil já mais estruturado)';
++
++  const recommendations = buildRecommendations({
++    platform,
++    presenceScore,
++    clickLeadRate,
++    leadSaleRate
++  });
++
++  summary.textContent = `Empresa pesquisada: ${searchBox} | Segmento: ${segment} | Fonte analisada: ${platform}.`;
++  presenceScoreEl.textContent = `${presenceScore}/100`;
++  clickLeadRateEl.textContent = `${clickLeadRate.toFixed(1)}%`;
++  leadSaleRateEl.textContent = `${leadSaleRate.toFixed(1)}%`;
++  priorityLevelEl.textContent = priorityLevel;
++
++  recommendationsEl.innerHTML = '';
++  recommendations.forEach((item) => {
++    const li = document.createElement('li');
++    li.textContent = item;
++    recommendationsEl.appendChild(li);
++  });
++
++  drawPieChart(
++    document.getElementById('pieChart'),
++    [interactions, Math.max(impressions - interactions, 0), Math.max(leads - sales, 0), sales],
++    ['Interações', 'Sem ação', 'Leads não fechados', 'Vendas']
++  );
++
++  drawBarChart(
++    document.getElementById('barChart'),
++    [impressions, interactions, leads, sales],
++    ['Impressões', 'Interações', 'Leads', 'Vendas']
++  );
++
++  resultSection.hidden = false;
++
++  latestReport = {
++    generatedAt: new Date().toISOString(),
++    searchBox,
++    segment,
++    sourceLink,
++    platform,
++    metrics: { impressions, interactions, leads, sales },
++    rates: {
++      clickLeadRate: Number(clickLeadRate.toFixed(2)),
++      leadSaleRate: Number(leadSaleRate.toFixed(2))
++    },
++    scores: { presenceScore, opportunityScore },
++    priorityLevel,
++    recommendations
++  };
++});
++
++downloadReportBtn?.addEventListener('click', () => {
++  if (!latestReport) return;
++
++  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Laudo GMN</title>
++  <style>body{font-family:Arial,sans-serif;padding:20px;color:#1f2937}h1{margin-top:0}.box{border:1px solid #dbe1ee;border-radius:10px;padding:12px;margin:8px 0}</style></head><body>
++  <h1>Protocolo de Laudo - ${latestReport.searchBox}</h1>
++  <div class="box"><strong>Segmento:</strong> ${latestReport.segment}<br><strong>Plataforma:</strong> ${latestReport.platform}<br><strong>Link:</strong> ${latestReport.sourceLink}</div>
++  <div class="box"><strong>Score de Presença:</strong> ${latestReport.scores.presenceScore}/100<br><strong>Prioridade:</strong> ${latestReport.priorityLevel}</div>
++  <div class="box"><strong>Funil:</strong> Impressões ${latestReport.metrics.impressions}, Interações ${latestReport.metrics.interactions}, Leads ${latestReport.metrics.leads}, Vendas ${latestReport.metrics.sales}</div>
++  <div class="box"><strong>Conversões:</strong> Clique→Lead ${latestReport.rates.clickLeadRate}% | Lead→Venda ${latestReport.rates.leadSaleRate}%</div>
++  <h2>Recomendações</h2><ul>${latestReport.recommendations.map((item) => `<li>${item}</li>`).join('')}</ul>
++  <p>Gerado em: ${new Date(latestReport.generatedAt).toLocaleString('pt-BR')}</p></body></html>`;
++
++  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
++  const url = URL.createObjectURL(blob);
++  const link = document.createElement('a');
++  link.href = url;
++  link.download = `laudo-${latestReport.searchBox.replace(/\s+/g, '-').toLowerCase()}.html`;
++  link.click();
++  URL.revokeObjectURL(url);
++});
++
++window.addEventListener('beforeinstallprompt', (event) => {
++  event.preventDefault();
++  deferredPrompt = event;
++  installBtn.hidden = false;
++});
++
++installBtn?.addEventListener('click', async () => {
++  if (!deferredPrompt) return;
++  deferredPrompt.prompt();
++  await deferredPrompt.userChoice;
++  deferredPrompt = null;
++  installBtn.hidden = true;
++});
++
++if ('serviceWorker' in navigator) {
++  window.addEventListener('load', async () => {
++    try {
++      await navigator.serviceWorker.register('./sw.js');
++    } catch (error) {
++      console.error('Falha ao registrar service worker:', error);
++    }
++  });
++}
+diff --git a/download/laudo-gmn-android-pwa.zip b/download/laudo-gmn-android-pwa.zip
+new file mode 100644
+index 0000000000000000000000000000000000000000..33da1c6a4f07664b561387192de82f597ebfbdf0
+GIT binary patch
+literal 9688
+zcma)?1yEdDnt&U3cXxM}Kxo{9I|O%VoZ#;6!QI{639bQxdxE=!AOV)V*?E)M_hxsi
+z>)yIu)%UB@zn}j<in0)pm;e9(7J!`>s4I3?s}6tx04}fq0C)f)z!GF)>c(v0Y-^*Y
+z3I~9YC7!XweZ5@V5CCA1uWteVxHV}`f(Up}yZ7mqPQ@jds)%@m@uhU`N?i4p{EhgS
+zW(b<zBxpK~GL0tN6oh6!0K5ZpLvx`V;XMx3>}F{W<JOWtFloJSDnq$S$n3G>C7h~#
+zlqNTJN(4(wO_Ee-za`mLjq(&WTY<q5z6pvugS0Rby5N8kl@`d82|R?dV~$;A0Y_KI
+zfs)U|k;9u{FOvfr(ILW8X4id^^MI4nLbT;sqLyPFptU<rbv!tAbybJwz>vx#l4VvC
+z-zZVY5!?*iCJHqS5p|Zh7E4IH*7!!__~}4%LdaskNE)5go5}_H^5^<bo@FG#uKis(
+zT{NgpoI=%FG>b;Bd;@2mvk3#Y7HsBAOQ!*01ps!YPceqI-pq%A*~IlcIS@RWD>7y{
+z-xvJ4F&inht;Lh0Ga~YDn|h2UN=SMVSX61l=B17x<#{Pv2a0oUHmhe>NMqRuAs~C1
+z)<mI89qW`Jof_Mz^FU=S<4v)+LIhEsT#}jgC2vqf5k6KyD-@I(T$*130(|72Wh2X;
+z9p4;qCNqj^o}T$sB3glAUTa<h06q{+8k1UVQ4hlp9gKTD?}%?nF%YpmrBo*u9#a%x
+z%ibLK`3?TI3_(mAFdEK67Lwj9>F`Y_wgXtcUnjmA){InnQf(nlu9aDg17=d8Ynh;W
+zrHma#2(rJ1IqYHJGn;vO0(M~<_|G`L%be?$2<a=l@T~Ri3}XRwN~o+Iy26um&=*LT
+zv=K*@4Du;{q}HZH2zR12og0{wzTK!fT<Qd4%$tCk>NhOXIn=6bG7oM+BgcfIFe5y(
+z$k0&=bbO!mi~_9K4>oa%0ZQ~zR&$1ve1_Xul7!rTbto%wwCOt=bNzbG!EfMUcw-E}
+zT5*{n1ioGW2pDXIfg5W5c8y|82!(K*q1_1^n0cKGdQOwaXO7v%M=6t)EOeo7%rpMf
+zAkVz~rKq!B$)0>SRdh}-r7faQ#@8T&M7QMwkYxl*p8$Yi%>KlVXx^Y@eu8+s#RspF
+zemH{`lJ#z%;`AX5OyMFy>+2A6C|ejMzCkBjGz?*4fUE^?uYlhG+E>~&l`mQt+)Pv@
+zZg5OFDm4atHz%7=2XgRoyv{Ow4Ua!)4p=^puzs+gAO=}un*7`gz}HmXp*7u0K#Ul7
+zAn9I$%lAh(03B%HvkFQU-%qE@ZDZd+dnv@9gByR&4&{2Vv1+tP@xrWjo)xWr)4a|4
+zB5H8t60X0J3X`|UKdsCs(TM=!wkO3(vODNo<ilvG#oHvl%A$ZCI}H~X8smC?k@E4%
+zGXA#A;4hapWH*byEnYfs_|qF)*{<rlIXqm!y8z3RDR0n0NVh=FON<A%^EdylFV7!-
+z5Xt1Faewf?v+7aM29FFtb%LTz?MciNmZzXI=;DBygtv??xYj~t(p<=Dqna`wSuSY?
+zEmOWdg%iSZz=$SjYauYguA;eOw|+U+^%29UT)=E4L~f4A3Yb0f$$S|^l67#g3pLO^
+ztcs0WQPBI6Yx_(sg56?UWMkk%<Q>e_*+VIwja+v^McaX6(4)-j{=s~hi{%*NGLB=y
+z2>&=`XQA|{KdTR6f>Y@>-@lrJaf8d!n<r1=+<cjP+vdbN+SbT=F0*6DvBC(vg)#QP
+zX9M`XrIkSwJO&{9;b-ZB;nKcf%$YD!v}iRtWU%aLc`3o((3bG!-ho#tJBAodb({U9
+z7|#u6#q!VUZKR=lf3(Pc5*_GD<kEIJ2M<RZ1g!+WFx|XiB`ArtZmA@bQF_52wdBfc
+zjnG*UEIiIrlfBcBO?yR+`3p(kD{SY}B;VT&{yf{Yv~mzn&MrGUsfarC=n=)bEg__b
+z9C^DO3EeDyEzf6xdi^2wyF>d-Qrjplp&DvaRX<2`#ESCeg4yNM*?fGD?|t$TY|T+$
+z(cM@!rhdi~kDz+%9DCEHzM8QHH15NTwk(N4`4x`Oa{E<#&q;e5Um)E@C>JJMljHG8
+zMT}ODdrYBs4a_ZDBM#B_Y5o$cd3R19yjRdEw>q`AtEX&BW|K>CY6M*|oVie-D1!j$
+za~kc^fKH^GUo=fI?oxBZsiO!BFCD(8hN$)>H)U7r1De&=*QVSUB1oxG)hhw0+4dxO
+z(Q7nL(efjUx4xe-qaCgY2DDZbIgi0@!VDlE7=}KiGvlzl_ZVBu<BtMOMV|PBXF~eo
+z<+1Vkl3I-+RG67l2~j&zw|=^YdgiN5LGy0X_@+Jk@No6h#+nan0o|~H24A_n>&Kn5
+zs@y70AR6uF_ZiQ&n3Mz=GTX;7jqao5#5|66!FS>r50o2IW{pnc^#*xepFV!p#HURZ
+zwDk5}k<4`F>%q5j)RV2j>h!VD-yXx^BVtIw%U6pch&Rn5A*{*yjuP{ng$CCCW8D{^
+z_-76UzUI(}tal~(5C8xt!as7Tle4>xsS~rYlhYqL^yA;>&?@!5gaU5Vu15yd-4*&b
+z!J4&T(@P(9f26Cv1?ECCK%i57ipiRP_S6PP#P#GJtwwSET&n*;NKo*;G@1R|ITl$`
+z@nC%AHLuXO!%?Vo^?gPN0+$?St1TneMg-ST@7Z80Ci>zUZhRU~DRZT<G@k(tGBL1Y
+zHsvBd3&bl-5x=>kRjcoj))Z<uD`7oBpUm3TTJLtS3nTQ`@x_>e1QL1!c4hF>8)T9+
+zUm`hk1!r{$Ah2wMC21>;(JgQ;N6r;#NqxO8N9^d;B(}Aw30C~DtDBNc?Sj>-zDZss
+zA4Z#+TI-vXt9pcK!8cdaY?ktyt~9A}OzCarg&YxAVxp%O2b<~oac0<)IMH?z*Opj$
+z{x~UJeRo{5&MgO@GeDC>8s6%Z*Yjagj{V3zpeNP=3J$x>{{?^Dkt2$OQ256v&I5BR
+zpRvCl>iow!%=p@c(zyiG&;ic#TX$jS8g8D`+}PUgIEmx{l#K12M5_6#W$sq?!*)$j
+z0M>k(!*`I5r*N-ckbb+=GPRt5*Oe5e8!sr%W|*%wiLE^S)(5(ZdQIuuTzzAt9fM;L
+z!<y0O=n-+1kBDlP6xeMB%-g$t4+%wz9u>O4Q36(yz4Na=oGn`Cq!Ap%Bb2a&2Z%eq
+z7p)y%*)C98z+`EGS8Yp5ygu_hoMFyAvHiTRbRr8?m+DAKaV~;tQtNGY{6`f`kGke`
+zv1DHJhP4N*4)C{$cx*gav5$d8gOZPdJ#NhmQTVyMayrsFtcw`8U(sSrC1{r?`mWG*
+zJ#RmDTW6T`l)yp&SMom<wp=M?)~iOTIES}TNq=^fJ?SmzC%I}+g&|vLr45y{G}946
+zFQd#XK1Hz1ia=JWRmMz!r-X{<sJ*os@NJGpyHD2E>D{_J;{GD%(`Rf=q-(crceivj
+z^mb8Z4eSxAndLKX4N7>1x)#KEAhDg*CdUVF>K=_}cFj{Aru3Kc)Hh!!c|MaaO}|N(
+z78npb7wSZu@kr=M#3$O}btgi5KHWuq=o7`^zhVAnZeBdeu~7V$R~<pGOq!p_E;8rX
+z7%x#@tD$u)U@K7`Z))8>dXkcBt;af=y^_9BlsmmQp=CSj)^-Nnk)uszA=<FmmUxXm
+zbf5aAE`7agHl=95`QgMQTy4}`M6_jR5x&*H#Mrht=ebsNbE&<u!}FwUf@{8a!faow
+zLxh~iEjs_CLx@omDt<5KkwOYX_z8C6l+hQ3(gXa;_B+bIyqxXT%WLQLdjt>x04oXr
+z0Q$93Hng{Aw)%&M`~1C!H{t6zejU2>Rbborjtz_qlCo+_DGQZN(708%v^Av~PF}G|
+z4(W}{#Paj^_ZQRJvqO#};JvrsrO4s)2PGsHcEH4fNh#556v<Hfr=4Y=W&2ExXgCyW
+z6}L@sG*5%??#G8U@nAj3(_UO2+}dvOL-!w^yuF4q&Y!g)5}1Z4Qvj4oNQ<Y0KIq<Q
+zm%9;xAZmv`UJMRgNY#i}=b<(LC$DIC4o|hgkfgeFUnB7n&VIMdV21tc4;zcOLT7vU
+zu>{<vzf)l1=W+$3N=&)a64MxnuCPlb%XoXzSBu}JB4U?zS$0PN=(k$&mOb#9w$f#C
+zK|6~6&g4pEJ|-|3y$j4C0<llaJfvi~Zw8((Txwp*7dIVUbMUTj8dHyrv8;2UNIy!p
+zAwsy~!jvU|fh_t}i0!G#Z}0WwZMW+hFl%`S+*8aW;EKheeHqmmAv$J8<p%pZAm59C
+zU4?~9sh|P0lMeLo5%}_Piw!S%Q3fKMguW?(2cB`EIDIyakJ^r$eq;0E*Y(w7uP@A+
+z_--xW2)EWs$eZ#MJfnTQ5nPl8o>{OSV!>QLL#tWqoo^rX(_4Z%pQ>S?#YGi|LF<JP
+zj{;I&hj|npt`S(V!O+~1>U!8ss(C*YeblHlSvZZc&;&$$+mvdVC9OcofX`EM6AeYS
+zAD44)x^wo>#C?iiR;Wchih>HUJNN9W<BhNYQ%z&L6{+4x1%it>?(R%kRLzoVp+L~K
+zcu_JN{`g}tQ~~HrQ`w??H41LMIPe3(#uzqJunZG<;g4;KN{c0ha-yZp8s}LuLbI(d
+z%4xG|CyDNR1O>ccHMhOm@QF~D;v4WOf=Bl4Z8Peh0?22+fu9j8aXSM-{oG$3pM<b>
+zOvt-Ze)Loz{*28EcP1BwCcdN=`P{lc^UST`JB$G)8;DEl0$&XULZi=-y^0BX)UZKF
+zxiTEZbitYvA>@|aX@3E;zp9{%H3!5;DC%y$K-@8X)JcN3JV-pP+rFi@{h4bjHpbh{
+zYXYJzk!WXrv>bAAO{LUJ2{`@WSE8yrj!25tTCoR3lG%?Om5-zv(Kk81g2?51L*|1l
+zw2PN84upWaYmX3v?+?Zl%MU6Ibi_zbMuX-8z+!Aq^In0I){=b!gVtqBx!Bk%GW6`7
+zIDV!#+nDGBgb_5t-MBP=F$dFzU>%AJM~oufVLQ=p*<sLGVecbHo03t9JbNKxJpZW0
+zi+QO!?N^{tf$K5cXP~@>hUawa#QarX3~@|2IgpE?0BsA&SB1J-Ej2?P4H1ihW|n6G
+z2GSAF9tg?krO>9%EgKv-chqbSL)XKXxZ^fN$KLTawuTQ@VH?6n^ewjG!j*>pG}wZl
+zQAB<t`(iZ*;zR=UgxJPYKne^W*^l63$4!<43@tZPf=bw9Z-jM?JQ+GhUY3y6nwC#X
+zhwS@<3sbzQCo^B|5A5s^JTh&3sUD1nAyK!culr1tVYOCHA(la-r_qQvl^z*zd|8Lc
+zWQN%yI^tY6wCkB&!K!RxA@Fddq+Q$36HJM5l{d;)6UJdGz}~QD7qpPmC>7=B03^2S
+z)VKh|*g@4HbJk<mqdqCUNQ7PF_koZXrjr-*H6h#9u==08FCplu-ZLT!sis-50N9uX
+z7F#|wD&4`1zQ>LYzW1>S_;@hL|7b>5-}tV`C!_k>h!yt)v8PZ@G%>;o)tpsskMXO+
+zLf{Mo4W}JqwK`W<i|W(x9knqoqLNlFQTQ8R`oJ^<zNP(p1^wJQoG4qcXhZp0m7}~v
+zBT0d$o>p8;AV3{UGJ8K+6$X1gwL~ay9pd2QlZV?_-PwwVDTLV$3oG~9;ft`OcF}+V
+zstt_sa5kk!A^*=_eZ$r9>o*tQBXXl01edXpWYrAe-b#s6+0547@CS%Of$VSy4%Ew6
+zfZv^MfHv__0Ul5eMi$AR#9OrueXp52PSpu!O<f^9(x0j>v(&KReJ<<9_bf`Err>j(
+zklO66oFTEk6GD=7LQ@NmWQDL9bKN!#2X0Mr74E9QF##EsZIFlK=TU?7{4u_~oymYn
+z!}IMy!$9_~(1C=Va|_VBZ=m4PU-d`<z8g+$hWRN`ZMv40Dp6dbB^m@Irp~*X$5DN(
+zE>IR`LMx{gCcxV0=FwaF;m!#SRdoo9u#}KFh=xr}Q+CG}TE2G+*NA_?a3BsYlO$x=
+zRgohy1+6d4v<LU8AWCja`h*LOF~S7_DDJAxi5>g7Ay=c8rmlRa+lQVF!3&B@#pCU}
+zkS+Bsb43avsGKeJvSLuM_IjC)PN6M-w05f$a#_ICu#5Hennl`@#GDwnw&$Av#r;_I
+zB>wuyTkg$yRNzkCmt|$+FU+`*2}_M3X-u^;7n!87{_)DN{FL@}I_F%FR`8Ed$DT7G
+zHjU{R9BX+eTn9f0+Ut>Bm)?pG7kxpwT|Txg-OU_Oyao@JvHc*Y2SG2DUfy-4&5ukV
+zD0POFEzWy>_JSpqVGzDU=)h-Jos<f?nR~K}8_aFPOnc{4df*OV;M!5>kktRu-a)OP
+z-qqo5eREE&#OdLNUyr4u;WY?m_!w1okf}w^ZUJH^zCe5YSq*=PaLe$9Cr>L4&SPjB
+zgAzQLO4B%8-La!Lk$T~6fDH@M1$VCz26y&_Hcafe8xlaF0)r37|IGp8dvu@cB?r9q
+zZ2ch+5r6XxK|@Eetu+yw2YX26<N9ES3L|(#Lk6^*9=>5iiz;^T?39BKy%chUDC&TT
+z`v}??ww=_39MkouM9BBC<_4A^+KO^8pOf2Js*_L^O|U)Zs3PxL2<et;hf}%F#`3v7
+z!{D6$9m5f<flfDfb-CxARJwC>#u)C*<Yvf%7pF-x#wX3ARS@DpUx_}BeTtb<amMjS
+zNijkkgQl=1#`P3haZXzYn=RRpRdCdChBO;p0yhpkNbu=28i9$RL!S(q#v!9(&Fwxh
+z`%+0pY#u~~pmpTb@2l4&5&d<jMUF>T$+~TBWwWXu#Mi<hQLh@%I*b)mVRUfiOpq=Q
+ziguR^*f*<P_YF(7Iu2*B7GzkUDf{VCrdexIH>(P!i{g4{DJpk2*44U$Vj#Y7pDoWe
+z^_H(>1P#n~I64V<JWOm%T(vIBpmPvy*G=qhm>ZNmaHDZL)=GXQbH09@##n#j@j@5^
+zM1k?F70>iXC`_Aqoc8VHJv{BrOyS3bDREZ(e%f*VgL@Ld*znQt#gSFL@0944p$jh7
+z#O)2g9GQaaaj_{6SbT4o#DEX`X3>WCjS(xJPt*5ZBktC~B=%$ng$k2-eK%vS9)b!^
+z)I$rus#ti_-uIBkY^X+yayO(TV*&(7ak|n31VwtHR*ev0PlFr9+je$yVWD2=s||g9
+zTIG!*?^v@4mOY%wl&$A0FmM%dQO!te>Lf<%pZ0rcXko4zB1&M?JO;QdP0~`OJv_fQ
+z_V<Iw7KC1eUY0vsP~^u}X_a4z8W8fnpXSqIrrnN;dVK!D)rqTck-`BIEiKQ~qDVR=
+zQ!u!K%w%jF(YmaYZ-?c`#xlm%Gn1TwVXFi}(o(Ys0Avl}{p0{Xuo3x77@q=9Jeicy
+zhtaQilN1|Ye%Sd+zFU!1l)J$fw!1`!r}qNG+_C10A-ck5vEDNqfS@Nqo1=xV^l_{G
+z7z$&{UnN4h6RsAddlrn&dO;)>x<4NCLwa<{B@-DDz^BW^cc*TkHZB$<uAl6TkD%pV
+zCdy;~_CoI)MW_f)yj<_VXp6rgqWwp8M8Z(3D4uxW3oP+E3hZSaLLVW-P8gr&6Y2^G
+z@6J*1@RV0|IZ5>j6XG!TTp?2ADD;v>s_x>9+`Hq^GK;D4h#54-9CT$?mYO;~XjM7^
+zh1+;&l>0+b?5cL)YqvemOS-MiyFAPTzN|f}-G0$BW`-RThCNP5DCxnb_Ik*^<7slL
+z^$}cNt@w~3aPoNC=MK_5&&`q?n7V~%Hdtv==XkBBfqvyl5yCIm$MqD`Amg4aij2qw
+zt@_Cr^KWdKR|L$fJZtZf+fLky3t80RjhQ<%#=+%vso+_6XOIe6e3TE9rHFw3+&{J7
+zwW*i233=Ef%m}E5jTwZmmW!~TXi#<yIo4jQP{MrboIDwNOiJ$R1-Daq!n3hRPl-xG
+z3Wg7s9H@5cAHXx$WfO(9tBinJLaJf~heiqy0J*o{o%sH1@9~fus0%+AqQ(RU07!xZ
+z0GO|P4_iZ!rJ1RdGxG;iqklgC(QEkCtN)vReOBDG3<Mi$=(%@<q2LP0vM7QW>U%!<
+zd+{;OwDl0`v^Wz}>%%#>3*iSN>W)ZXWOBEW-skSkIF=3qFidPDEF8r(BMLmw*;%AR
+z%s{%g?z3NxoHFYBw$ddtH~Ec{>}c48++tJ|J49r`eu#S+%Q#q#A$NFK?)5%hYw$j3
+zdTc}!KO%R5&V9j2a2Gx)F*)?;#rt%}^2)+yUC9C%6s*i4+mJF#Dy!!C0;~x6)3!QC
+zI?aaZtO6^gEVYVm)J2m6f(({-3Kj<VwppS$G#_KV3n5qI>Pv3GYLCsZZ;TYjJ2MiO
+z?>iA$Tv`@C&NJ+;lgD#sv7on9KX#27$j>!8uOZtV*IIXeo#C1RMKW*1zHn<!_;5%S
+z%J1hu8?f5g7g;JwU%NMwc>mVi`6c=(b~0|8SJ4x`Hh7?3Mep?CpS!;QAnRadJ=p<P
+zOz-oWFa`Nuaq2tL0uj7mK{>pzJ5qKdr;ec_OWXP>vd44k!_ZaxN)$`SsmZo|N@>|5
+zr1YUVt$MEr5)8~d#d;(b$qJF^bO&BIWqouO?D2gq_MFv-7C>IyM$qD^J}vSlCr|JR
+znyo83r+m{Hn!4JJlO~p2IAUX-&fUSjpoUo*CVb3I(Dl~v=ey^WBeU-)PCTHrEpK#4
+zd=m-0eQAiXiD2&B+@ZW$rPRiD*g#|02;!O8<ST}D)Ba9c3d(m{>8p^YQ1CBV$a&N)
+z!10GJpFR9R<(=&)Sh7R|g{en_GBhL(`{l4;)T6aZ!xD${KBhHheZQG}W`w*dtm6SC
+zPK?<lb+^-^#RK|?8N-ACHNoXkr#ORNqaZgWp7$g1{?gY@WL7h3Wp@><_exO#%kr%?
+z_bW@|Lj0O<4_XyWEc~olGqjudy=JkTb6XtC(;w9DSWQ=-Zt~g?oQxg=XL|nKOKxbN
+zpl4rIwfpKNh_9-$Gc&WX1eyM8n)M$vrlvfaFb72Jn%01w=Gy2-6kUE-z6HQZp>OUu
+zNwLK`1<kEbQ7U>(VDk7F`yleY15ZL>y0>)qQ2s8qOid^e@D|a-Q*9E(f^(f3U-ajd
+zXk!<6sfP#`fe|t$YC3UNNp1LBUk@yySkfmPPTm>n6}I)*g<x2GYj8ZcZgZ@M
