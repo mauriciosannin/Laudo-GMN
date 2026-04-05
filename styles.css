@@ -91,7 +91,7 @@ button.secondary {
 .kpi-grid {
   display: grid;
   gap: 0.8rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .kpi {
@@ -104,7 +104,7 @@ button.secondary {
   gap: 0.2rem;
 }
 
-.kpi strong { font-size: 1.5rem; }
+.kpi strong { font-size: 1.15rem; }
 
 .clean-list {
   padding-left: 0;
@@ -116,6 +116,35 @@ button.secondary {
   padding: 0.55rem 0.65rem;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
+}
+
+.bar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.bar-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 99px;
+  background: #dbe5f4;
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #16a34a);
+}
+
+.script-box {
+  border: 1px solid #cbd5e1;
+  background: #eff6ff;
+  border-radius: 10px;
+  padding: 0.8rem;
+  line-height: 1.45;
 }
 
 .actions {
@@ -171,5 +200,4 @@ footer {
     box-shadow: none;
     border: 1px solid #ddd;
   }
-  }
-  
+}

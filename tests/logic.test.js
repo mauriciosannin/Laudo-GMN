@@ -4,7 +4,12 @@ const {
   classifyScore,
   calculateWeightedScore,
   competitorGap,
-  getPriority
+  getPriority,
+  buildPriorityActions,
+  estimateRoiPotential,
+  calculateProspectFit,
+  getDataGaps,
+  generateApproachScript
 } = require('../logic.js');
 
 function values(fill) {
@@ -38,5 +43,43 @@ assert.deepEqual(getPriority(40), { level: 'Alta', text: 'Intervenção imediata
 assert.deepEqual(getPriority(70), { level: 'Média', text: 'Otimização contínua' });
 assert.deepEqual(getPriority(90), { level: 'Baixa', text: 'Manutenção e escala' });
 
+const topActions = buildPriorityActions(mixed);
+assert.equal(topActions.length, 3);
+assert.match(topActions[0], /Monitoramento e rotina/);
+
+assert.deepEqual(estimateRoiPotential(45, 30, 4.2), {
+  level: 'Médio',
+  text: 'Há oportunidade relevante com consistência operacional.'
+});
+
+const fit = calculateProspectFit({
+  verificationStatus: 'notVerified',
+  urgency: 8,
+  hasTracking: 'no',
+  hasWebsite: 'no',
+  gap: 35,
+  marketingBudget: 2
+});
+assert.equal(fit.level, 'Excelente');
+
+const gaps = getDataGaps({
+  profileUrl: '',
+  decisionMaker: '',
+  hasTracking: 'no',
+  hasWebsite: 'no'
+});
+assert.equal(gaps.length, 4);
+
+const script = generateApproachScript(
+  {
+    decisionMaker: 'Carla',
+    businessName: 'Clínica Sorriso',
+    region: 'Campinas',
+    contactChannel: 'whatsapp'
+  },
+  ['Elevar "Monitoramento e rotina" de 2/10 para pelo menos 8/10.']
+);
+assert.match(script, /Carla/);
+assert.match(script, /Clínica Sorriso/);
+
 console.log('All logic tests passed.');
-  
