@@ -3,31 +3,40 @@ const resultCard = document.getElementById('result-card');
 const overallScoreNode = document.getElementById('overall-score');
 const priorityScoreNode = document.getElementById('priority-score');
 const priorityTextNode = document.getElementById('priority-text');
+const fitScoreNode = document.getElementById('fit-score');
+const fitTextNode = document.getElementById('fit-text');
 const competitorGapNode = document.getElementById('competitor-gap');
 const competitorGapTextNode = document.getElementById('competitor-gap-text');
 const maturityLevelNode = document.getElementById('maturity-level');
-const checklistListNode = document.getElementById('checklist-list');
+const pillarBarsNode = document.getElementById('pillar-bars');
+const priorityActionsNode = document.getElementById('priority-actions');
+const dataGapsNode = document.getElementById('data-gaps');
+const approachScriptNode = document.getElementById('approach-script');
 const actionPlanNode = document.getElementById('action-plan');
 const recurrenceListNode = document.getElementById('recurrence-list');
+const roiLevelNode = document.getElementById('roi-level');
+const roiTextNode = document.getElementById('roi-text');
 const installButton = document.getElementById('install-app');
 const downloadButton = document.getElementById('download-report');
 const shareButton = document.getElementById('share-report');
 const printButton = document.getElementById('print-report');
 
-const { strategyPillars, classifyScore, calculateWeightedScore, competitorGap, getPriority } = window.LaudoLogic;
-const STORAGE_KEY = 'laudo_gmn_latest_report_v1';
+const {
+  strategyPillars,
+  classifyScore,
+  calculateWeightedScore,
+  competitorGap,
+  getPriority,
+  buildPriorityActions,
+  estimateRoiPotential,
+  calculateProspectFit,
+  getDataGaps,
+  generateApproachScript
+} = window.LaudoLogic;
+
+const STORAGE_KEY = 'laudo_gmn_latest_report_v3';
 let deferredInstallPrompt = null;
 let latestReport = null;
-
-function buildChecklist(values) {
-  return strategyPillars.map(({ key, label }) => {
-    const value = Number(values[key]);
-
-    if (value >= 8) return `${label}: ✅ forte e consistente.`;
-    if (value >= 5) return `${label}: ⚠️ regular, precisa otimização.`;
-    return `${label}: ❌ crítico, tratar com prioridade.`;
-  });
-}
 
 function buildActionPlan(values, analysisMode, verificationStatus) {
   const tasks = [];
@@ -69,6 +78,19 @@ function buildRecurrence() {
   ];
 }
 
+function renderPillarBars(values) {
+  pillarBarsNode.innerHTML = '';
+  strategyPillars.forEach((pillar) => {
+    const score = Number(values[pillar.key]);
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <div class="bar-head"><strong>${pillar.label}</strong><span>${score}/10</span></div>
+      <div class="bar-track"><span class="bar-fill" style="width:${score * 10}%"></span></div>
+    `;
+    pillarBarsNode.appendChild(li);
+  });
+}
+
 function persistReport(report) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(report));
 }
@@ -77,18 +99,33 @@ function renderReport(report) {
   overallScoreNode.textContent = String(report.score);
   priorityScoreNode.textContent = report.priority.level;
   priorityTextNode.textContent = report.priority.text;
+  fitScoreNode.textContent = `${report.fit.level} (${report.fit.score})`;
+  fitTextNode.textContent = report.fit.text;
   competitorGapNode.textContent = `${report.gap}`;
   competitorGapTextNode.textContent = 'estimativa de avaliações para reduzir diferença competitiva';
+  roiLevelNode.textContent = report.roiPotential.level;
+  roiTextNode.textContent = report.roiPotential.text;
 
   maturityLevelNode.className = report.level.className;
   maturityLevelNode.textContent = report.maturityText;
 
-  checklistListNode.innerHTML = '';
-  report.checklist.forEach((line) => {
+  renderPillarBars(report.values);
+
+  priorityActionsNode.innerHTML = '';
+  report.priorityActions.forEach((line) => {
     const li = document.createElement('li');
     li.textContent = line;
-    checklistListNode.appendChild(li);
+    priorityActionsNode.appendChild(li);
   });
+
+  dataGapsNode.innerHTML = '';
+  report.dataGaps.forEach((line) => {
+    const li = document.createElement('li');
+    li.textContent = line;
+    dataGapsNode.appendChild(li);
+  });
+
+  approachScriptNode.textContent = report.approachScript;
 
   actionPlanNode.innerHTML = '';
   report.actionPlan.forEach((line) => {
@@ -121,7 +158,7 @@ function downloadReport() {
 
 async function shareReport() {
   if (!latestReport || !navigator.share) return;
-  const text = `${latestReport.maturityText}\nScore: ${latestReport.score}/100\nPrioridade: ${latestReport.priority.level}`;
+  const text = `${latestReport.maturityText}\nScore: ${latestReport.score}/100\nFit: ${latestReport.fit.level}`;
   await navigator.share({ title: 'Laudo GMN', text });
 }
 
@@ -147,19 +184,48 @@ form.addEventListener('submit', (event) => {
   const level = classifyScore(score);
   const gap = competitorGap(values, Number(data.get('businessReviewsCount') || 0), Number(data.get('competitorReviewsAvg') || 0));
   const priority = getPriority(score);
+  const priorityActions = buildPriorityActions(values);
+  const roiPotential = estimateRoiPotential(score, gap, Number(data.get('businessRating') || 0));
+
+  const prospect = {
+    businessName: data.get('businessName'),
+    region: data.get('region'),
+    profileUrl: data.get('profileUrl'),
+    decisionMaker: data.get('decisionMaker'),
+    contactChannel: data.get('contactChannel'),
+    hasTracking: data.get('hasTracking'),
+    hasWebsite: data.get('hasWebsite'),
+    verificationStatus: data.get('verificationStatus'),
+    marketingBudget: Number(data.get('marketingBudget') || 0),
+    urgency: Number(data.get('urgency') || 0),
+    gap
+  };
+
+  const fit = calculateProspectFit(prospect);
+  const dataGaps = getDataGaps(prospect);
+  const approachScript = generateApproachScript(prospect, priorityActions);
 
   const report = {
     createdAt: new Date().toISOString(),
     businessName: data.get('businessName'),
+    niche: data.get('niche'),
     region: data.get('region'),
-    analysisMode: data.get('analysisMode'),
+    decisionMaker: data.get('decisionMaker'),
+    leadSource: data.get('leadSource'),
+    contactChannel: data.get('contactChannel'),
+    analysisMode: 'pre',
     score,
     gap,
+    values,
     priority,
+    priorityActions,
+    roiPotential,
+    fit,
+    dataGaps,
+    approachScript,
     level,
-    maturityText: `${level.label} para ${data.get('businessName')} (${data.get('analysisMode') === 'pre' ? 'pré-análise' : 'análise completa'}) em ${data.get('region')}.`,
-    checklist: buildChecklist(values),
-    actionPlan: buildActionPlan(values, data.get('analysisMode'), data.get('verificationStatus')),
+    maturityText: `${level.label} para ${data.get('businessName')} em ${data.get('region')}.`,
+    actionPlan: buildActionPlan(values, 'pre', data.get('verificationStatus')),
     recurrence: buildRecurrence()
   };
 
@@ -197,4 +263,6 @@ if ('serviceWorker' in navigator) {
     });
     restoreLatestReport();
   });
-       }
+} else {
+  restoreLatestReport();
+}
